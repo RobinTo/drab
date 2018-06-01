@@ -428,6 +428,31 @@ defmodule Drab.Live do
     #  end
   end
 
+  @spec do_poke(String.t(), atom, String.t(), Keyword.t(), function) :: result
+  defp do_poke(socket, view, partial_name, assigns, function) do
+    assigns = Enum.into(assigns, %{})
+    partial = Partial.hash_for_view_and_name(view, partial_name)
+    amperes_to_update = Partial.amperes_for_assigns(partial, Map.keys(assigns))
+    html =
+      view
+      |> Phoenix.View.render_to_string(Partial.template_filename(view, partial), assigns)
+      |> Floki.parse()
+
+    update_javascripts =
+      html
+      |> update_javascripts(partial, amperes_to_update)
+      |> Enum.sort_by(&has_amperes/1)
+    assign_updates = assign_updates_js(assigns, partial, "document")
+    all_javascripts = (assign_updates ++ update_javascripts) |> Enum.uniq()
+
+    case function.(socket, all_javascripts |> Enum.join(";")) do
+      {:ok, _} ->
+        socket
+      other ->
+        other
+    end
+  end
+
   @spec do_poke(Drab.Core.subject(), atom | nil, String.t() | nil, Keyword.t(), function) ::
           result
   defp do_poke(socket, view, partial_name, assigns, function) do
